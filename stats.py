@@ -1,11 +1,10 @@
 import pandas
 import numpy as np
-import matplotlib.pyplot as plt
+import functools
+from concurrent.futures import ProcessPoolExecutor
 import plotly.offline as py
 import plotly.figure_factory as ff
 from plotly.graph_objs import Heatmap, Histogram, Scatter, Layout, Figure
-
-py.init_notebook_mode()
 
 DATAFILE = "data_125ms.csv"
 
@@ -13,49 +12,87 @@ data = pandas.read_csv(DATAFILE, sep=";", decimal=",",
                        index_col=("track id", "t"),
                        usecols=["track id", "x", "y", "t"])
 
-# Ensure data is sorted
-data.sort_index()
+class Grid(object):
+    def __init__(self, data, ndiv):
+        """Initializes the grid.
+        Precalculates block indices and the steps between datapoints
+        of the trajectories.
+        """
+        self.data = data.sort_index()  # Ensure data is sorted.
+        self.ndiv = ndiv
+
+        x_min, x_max = data["x"].min(), data["x"].max()
+        y_min, y_max = data["y"].min(), data["y"].max()
+
+        self.L = max(x_max - x_min, y_max - y_min)
+        deltaL = self.L/self.ndiv
+        self.x = np.linspace(x_min + deltaL/2,
+                             x_min + self.L - deltaL/2, ndiv)
+        self.y = np.linspace(y_min + deltaL/2,
+                             y_min + self.L - deltaL/2, ndiv)
+
+        # Calculates the square index given the coordinates.
+        def square_index(x, y):
+            ii = ((x - x_min - 1e-6) // deltaL).astype(int, copy=False)
+            jj = ((y - y_min - 1e-6) // deltaL).astype(int, copy=False)
+
+            return list(zip(ii, jj))
+
+        # Calculates the displacement vector.
+        def step_vector(data):
+            steps = np.empty((len(data), 2))
+
+            i = 0
+            for track_id, traj in data.loc[:, ("x", "y")].groupby("track id"):
+                for j in range(len(traj) - 1):
+                    steps[i+j] = traj.values[j+1] - traj.values[j]
+
+                i += len(traj)
+                steps[i-1] = np.nan
+
+            return steps
+
+        # Add the square index column.
+        self.data["square"] = square_index(self.data["x"], self.data["y"])
+
+        # Add step to the next position (NaN for last point of traj).
+        steps = step_vector(self.data)
+        self.data["step_x"], self.data["step_y"] = steps[:, 0], steps[:, 1]
 
 
-#####################################################################
-# Divide the space in squares.                                      #
-#####################################################################
+    def apply(self, func):
+        """Applies a function on each non-empty grid square."""
+        z = np.full((self.ndiv, self.ndiv), np.nan)
 
-x_min, x_max = data["x"].min(), data["x"].max()
-y_min, y_max = data["y"].min(), data["y"].max()
+        for ij, data in self.data.groupby("square"):
+            z[ij] = func(data)
 
-L = max(x_max - x_min, y_max - y_min)
-NUM_DIVISIONS = 20
+        return z
 
-delta = L / NUM_DIVISIONS
+    def heatmap(self, func, title=""):
+        htm = Heatmap(z=self.apply(func).T, x=self.x, y=self.y)
 
-def square_index(x, y):
-    ii = ((x - x_min) // delta).astype(int, copy=False)
-    jj = ((y - y_min) // delta).astype(int, copy=False)
+        lyt = self._plot_layout(title)
 
-    return list(zip(ii, jj))
+        fig = Figure(data=[htm], layout=lyt)
+        py.iplot(fig)
 
+    def _plot_layout(self, title):
+        x_min = self.data["x"].min()
+        y_min = self.data["y"].min()
+        deltaL = self.L / self.ndiv
 
-def step_vector(data):
-    steps = np.empty((len(data), 2))
+        return Layout(
+            title=title,
+            height=600,
+            width=600,
+            yaxis=dict(scaleanchor="x", showgrid=True, zeroline=False,
+                       autotick=False, dtick=deltaL, tick0=y_min),
+            xaxis=dict(showgrid=True, zeroline=False,
+                       autotick=False, dtick=deltaL, tick0=x_min)
+        )
 
-    i = 0
-    for track_id, traj in data.loc[:, ("x", "y")].groupby("track id"):
-        for j in range(len(traj) - 1):
-            steps[i+j] = traj.values[j+1] - traj.values[j]
-
-        i += len(traj)
-        steps[i-1] = np.nan
-
-    return steps
-
-# Add a square index
-data["square"] = square_index(data["x"], data["y"])
-
-# Add step size to the next position (NaN for the last point)
-steps = step_vector(data)
-data["step_x"], data["step_y"] = steps[:, 0], steps[:, 1]
-
+#%%
 
 #####################################################################
 # Utilities.                                                        #
@@ -74,131 +111,92 @@ def plot_trajectories(trajectories):
 
     py.plot(traces)
 
+# %%
+#####################################################################
+# Create the grid object.                                           #
+#####################################################################
 
-def heatmap(z, title=""):
-    delta = L/NUM_DIVISIONS
-    x = np.linspace(x_min + delta/2, x_min + L - delta/2, NUM_DIVISIONS)
-    y = np.linspace(y_min + delta/2, y_min + L - delta/2, NUM_DIVISIONS)
-    htm = Heatmap(z=z.T, x=x, y=y)
-    lyt = Layout(
-        title=title,
-        height=600,
-        width=600,
-        yaxis=dict(scaleanchor="x", showgrid=True, zeroline=False,
-                   autotick=False, dtick=delta, tick0=y_min),
-        xaxis=dict(showgrid=True, zeroline=False,
-                   autotick=False, dtick=delta, tick0=x_min)
-    )
+grid = Grid(data, 50)
 
-    fig = Figure(data=[htm], layout=lyt)
-    py.iplot(fig)
-
-
+# %%
 #####################################################################
 # Plot the global distribution of the step size.                    #
 #####################################################################
 
-steps = np.linalg.norm(data.loc[:, ("step_x", "step_y")].values, axis=1)
+steps = np.linalg.norm(grid.data.loc[:, ("step_x", "step_y")].values, axis=1)
 
 py.iplot([Histogram(x=steps[~np.isnan(steps)], histnorm="probability")])
 
 
+# %%
 #####################################################################
 # Plot a heatmap of data point count.                               #
 #####################################################################
+grid.heatmap(len, "Number of datapoints")
 
-count = np.zeros((NUM_DIVISIONS, NUM_DIVISIONS))
-for i in range(NUM_DIVISIONS):
-    for j in range(NUM_DIVISIONS):
-        num = len(data.loc[data["square"] == (i, j)])
-        # Use NaN just to be nice and avoid clutter
-        count[(i, j)] = num if num > 0 else np.nan
-
-
-heatmap(count)
-
+# %%
 #####################################################################
 # Plot a heatmap of the step size.                                  #
 #####################################################################
 
-stepnorm = np.zeros((NUM_DIVISIONS, NUM_DIVISIONS), dtype=np.float)
-for i in range(NUM_DIVISIONS):
-    for j in range(NUM_DIVISIONS):
-        values = data.loc[data["square"] == (i, j), ("step_x", "step_y")].values
-        steps = np.linalg.norm(values, axis=1)
+def step_norm(data):
+    values = data.loc[:, ("step_x", "step_y")].values
+    steps = np.linalg.norm(values, axis=1)
 
-        stepnorm[(i, j)] = np.nanmean(steps) if len(steps) > 0 else np.nan
-
-heatmap(stepnorm, "Step size")
+    return np.nanmean(steps) if len(steps) > 0 else np.nan
 
 
+grid.heatmap(step_norm, "Step modulus")
+
+
+# %%
 #####################################################################
 # Estimate the drift.                                               #
 #####################################################################
-driftnorm = np.empty((NUM_DIVISIONS, NUM_DIVISIONS))
-for i in range(NUM_DIVISIONS):
-    for j in range(NUM_DIVISIONS):
-        drift = np.nanmean(
-            data.loc[data["square"] == (i, j), ("step_x", "step_y")].values,
-            axis=0
-        )
 
-        driftnorm[(i, j)] = np.linalg.norm(drift)
+def drift_norm(data):
+    vals = data.loc[:, ("step_x", "step_y")].values
 
-heatmap(driftnorm, "Drift modulus")
+    return np.linalg.norm(np.nanmean(vals))
+
+grid.heatmap(drift_norm, "Drift modulus")
 
 
+# %%
 #####################################################################
 # Estimate the diffusion (assumed isotropic).                       #
 #####################################################################
 
-diffnorm = np.empty((NUM_DIVISIONS, NUM_DIVISIONS))
-for i in range(NUM_DIVISIONS):
-    for j in range(NUM_DIVISIONS):
-        steps = data.loc[data["square"] == (i, j), ("step_x", "step_y")].values
-        diffnorm[(i, j)] = np.sqrt(np.nanmean(np.sum(steps**2, axis=1)))
+def diff_norm(data):
+    vals = data.loc[:, ("step_x", "step_y")].values
 
-heatmap(diffnorm, "Diffusion coefficient")
+    return np.sqrt(np.nanmean(np.sum(vals**2, axis=1)))
 
+grid.heatmap(diff_norm, "Diffusion coefficient")
 
+# %%
 #####################################################################
 # Drift vector field.                                               #
 #####################################################################
 
-# Prepare the grid
-# @TODO: refactor this mess
-delta = L/NUM_DIVISIONS
-x = np.linspace(x_min + delta/2, x_min + L - delta/2, NUM_DIVISIONS)
-y = np.linspace(y_min + delta/2, y_min + L - delta/2, NUM_DIVISIONS)
-xx, yy = np.meshgrid(x, y, indexing="ij")  # @TODO: check indexing
+xx, yy = np.meshgrid(grid.x, grid.y, indexing="ij")
 
+u = np.full((grid.ndiv, grid.ndiv), np.nan)
+v = u.copy()
 
-u = np.zeros((NUM_DIVISIONS, NUM_DIVISIONS))
-v = np.zeros_like(u)
+for ij, data in grid.data.groupby("square"):
 
-for i in range(NUM_DIVISIONS):
-    for j in range(NUM_DIVISIONS):
-        drift = np.nanmean(
-            data.loc[data["square"] == (i, j), ("step_x", "step_y")].values,
-            axis=0
-        )
+    if len(data) < 200:
+        continue
 
-        u[(i, j)] = drift[0]
-        v[(i, j)] = drift[1]
+    drift = np.nanmean(data.loc[:, ("step_x", "step_y")].values,
+                       axis=0)
+
+    u[ij] = drift[0]
+    v[ij] = drift[1]
 
 fig = ff.create_quiver(xx, yy, u, v, scale=100)
 
-
-lyt = Layout(
-    title="Drift field",
-    height=600,
-    width=600,
-    yaxis=dict(scaleanchor="x", showgrid=True, zeroline=False,
-               autotick=False, dtick=delta, tick0=y_min),
-    xaxis=dict(showgrid=True, zeroline=False,
-               autotick=False, dtick=delta, tick0=x_min)
-)
-
+lyt = grid._plot_layout("Drift field")
 fig.update(layout=lyt)
-
 py.iplot(fig)
