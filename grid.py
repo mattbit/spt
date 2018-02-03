@@ -97,4 +97,4 @@ class Grid(object):
         )
 
         fig = Figure(data=[trace], layout=lyt)
-        py.iplot(fig)
+        py.plot(fig)

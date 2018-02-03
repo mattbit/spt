@@ -1,4 +1,5 @@
 import pandas
+import scipy
 import numpy as np
 from grid import Grid
 from utils import estimate_drift
@@ -16,6 +17,7 @@ data = pandas.read_csv(DATAFILE, sep=";", decimal=",",
 
 grid = Grid(data, binsize=0.5)
 
+
 # Add threshold and filter out the isolated bins
 THRESHOLD = 50
 
@@ -32,7 +34,9 @@ for b in bins:
 
 def neighbours(b):
     return [(b[0] + 1, b[1]), (b[0] - 1, b[1]),
-            (b[0], b[1] + 1), (b[0], b[1] - 1)]
+            (b[0], b[1] + 1), (b[0], b[1] - 1),
+            (b[0] + 1, b[1] + 1), (b[0] + 1, b[1] - 1),
+            (b[0] - 1, b[1] + 1), (b[0] - 1, b[1] - 1)]
 
 extended_bins = filtered_bins.copy()
 for b in filtered_bins:
@@ -52,7 +56,7 @@ grid.plot(Heatmap(z=z.T, colorscale=[[0, "rgb(120,120,120)"], [1, "rgb(0,0,0)"]]
 # Estimate the drift field
 xx, yy = np.meshgrid(grid.x, grid.y, indexing="ij")
 
-u = np.zeros((grid.ndiv, grid.ndiv))
+u = np.zeros((grid.ndiv + 1, grid.ndiv + 1))
 v = u.copy()
 
 for b, data in grid.data.groupby("bin"):
@@ -73,16 +77,32 @@ grid.heatmap(np.sqrt(u**2 + v**2), "Estimated drift")
 us = np.full((grid.ndiv+1, grid.ndiv+1), np.nan)
 vs = us.copy()
 
-for b in extended_bins:
-    nsum_u = 0
-    nsum_v = 0
-    for n in neighbours(b):
-        if b[0] < grid.ndiv and b[1] < grid.ndiv:
-            nsum_u += u[n]
-            nsum_v += v[n]
+K = 1/16 * np.array([[1, 2, 1],
+                     [2, 4, 2],
+                     [1, 2, 2]])
 
-    us[b] = 0.5*u[b] + 0.125*nsum_u
-    vs[b] = 0.5*v[b] + 0.125*nsum_v
+for b in extended_bins:
+    ku = np.zeros((3, 3))
+    kv = np.zeros((3, 3))
+    for i in [-1, 0, 1]:
+        for j in [-1, 0, 1]:
+            if (b[0] + i >= 0 and b[1] + j >= 0
+                and b[0] + i < grid.ndiv and b[1] + j < grid.ndiv):
+                ku[i, j] = u[b[0] + i, b[1] + j]
+                kv[i, j] = v[b[0] + i, b[1] + j]
+
+    us[b] = np.sum(ku*K)
+    vs[b] = np.sum(kv*K)
+
+    # nsum_u = 0
+    # nsum_v = 0
+    # for n in neighbours(b):
+    #     if b[0] < grid.ndiv and b[1] < grid.ndiv:
+    #         nsum_u += u[n]
+    #         nsum_v += v[n]
+    #
+    # us[b] = 0.5*u[b] + 0.125*nsum_u
+    # vs[b] = 0.5*v[b] + 0.125*nsum_v
 
 
 # Use 0 instead of NaN to get a better plot.
@@ -95,14 +115,6 @@ grid.heatmap(np.sqrt(plot_us**2 + plot_vs**2), "Smoothed drift field")
 
 
 # Now wait for last year.
-
-NSTEPS = 1000
-dt = 0.1 * grid.binsize / np.mean(np.sqrt(u**2 + v**2))
-x_min = min(grid.data["x"])
-y_min = min(grid.data["y"])
-
-x = x_min + np.random.random(1000000) * grid.L
-y = y_min + np.random.random(1000000) * grid.L
 
 def bin_index(x, y):
     ii = ((x - x_min) // grid.binsize).astype(int, copy=False)
@@ -120,7 +132,15 @@ def density(x, y):
 
     return h
 
-for n in range(1000):
+
+dt = 0.1 * grid.binsize / np.mean(np.sqrt(u**2 + v**2))
+x_min = min(grid.data["x"])
+y_min = min(grid.data["y"])
+
+x = x_min + np.random.random(1000000) * grid.L
+y = y_min + np.random.random(1000000) * grid.L
+
+for n in range(500):
     x = x[~np.isnan(x)]
     y = y[~np.isnan(y)]
     ii, jj = bin_index(x, y)
@@ -131,7 +151,6 @@ for n in range(1000):
 p = density(x, y)
 grid.heatmap(p)
 
-grid.heatmap((p > 0.10)*1)
 
 
 # Attractors with the biggest basin.
@@ -145,18 +164,7 @@ p.shape
 bins.shape
 
 # Select the biggest attractors.
-bins[p > 0.15]
-
-
-def mask2d(grid, x, r=5):
-    mask = np.full((grid.ndiv, grid.ndiv), False)
-
-    for i in range(max(x[0] - r, 0), min(x[0] + r, grid.ndiv)):
-        for j in range(max(x[1] - r, 0), min(x[1] + r, grid.ndiv)):
-            mask[i, j] = True
-
-
-    return mask
+bins[p > 0.05]
 
 def mask1d(array, x, r=5):
     i_min = max(x - r, 0)
@@ -173,7 +181,7 @@ def mask2d(array, x, r=5):
 
     return array[i_min:i_max, j_min:j_max]
 
-A = (18, 43)
+A = bins[p > 0.05][0]
 
 
 xxm = mask2d(xx, A, 10)
@@ -188,22 +196,19 @@ lyt = Layout(
     height=600,
     width=600,
     yaxis=dict(scaleanchor="x", showgrid=True, zeroline=False,
-               autotick=False, dtick=grid.binsize, tick0=0,
+               autotick=False, dtick=grid.binsize, tick0=x_min,
                showticklabels=False),
     xaxis=dict(showgrid=True, zeroline=False,
-               autotick=False, dtick=grid.binsize, tick0=0,
+               autotick=False, dtick=grid.binsize, tick0=y_min,
                showticklabels=False)
 )
 
-grid.x[A[0]]
-grid.y[A[1]]
 fig = ff.create_quiver(xxm, yym, um, vm, scale=2)
 fig["data"].append(Scatter(x=[grid.x[A[0]]], y=[grid.y[A[1]]], mode="markers"))
 fig.layout = lyt
 py.iplot(fig)
 
 
-RADIUS = 2*grid.binsize
 def MSE(params, x, y, u, v):
     x0, y0, A, r = params
     xx, yy = np.meshgrid(x, y)
@@ -213,26 +218,94 @@ def MSE(params, x, y, u, v):
 x0 = grid.x[A[0]]
 y0 = grid.y[A[1]]
 
-initial = [x0, y0, 1., 5*grid.binsize]
+initial = [x0, y0, 0.1, 5*grid.binsize]
 bounds = [(x0-grid.binsize, x0+grid.binsize),
           (y0-grid.binsize, y0+grid.binsize),
-          (-10, 10),
+          (0, 10),
           (grid.binsize, 5*grid.binsize)]
 res = scipy.optimize.minimize(MSE, initial, args=(xm, ym, um, vm), bounds=bounds)
-
 res
+def c(r, x, y, u, v):
+    xx, yy = np.meshgrid(x, y)
+
+    return -0.5*(r**2) * np.sum(xx*um + yy*vm) / np.sum(xx**2 + yy**2)
+
+
+MSE(initial, xm, ym, um, vm)
+
+def cMSE(r, x0, y0, x, y, u, v):
+    xx, yy = np.meshgrid(x, y)
+
+    return np.mean((u + 2*c(r, x, y, u, v)/r**2 * (xx - x0))**2 + (v + 2*c(r, x, y, u, v)/r**2 * (yy - y0))**2)
+
+
+cMSE(0.100, x0, y0, xm, ym, um, vm)
+
+
+scipy.optimize.minimize(cMSE, (100*grid.binsize), args=(x0, y0, xm, ym, um, vm))
 
 fig = ff.create_quiver(xxm, yym, um, vm, scale=2)
-fig["data"].append(Scatter(x=[res.x[0]], y=[res.x[1]], mode="markers"))
 fig.layout = lyt
 fig.layout.shapes = [{
             'type': 'circle',
             'xref': 'x',
             'yref': 'y',
-            'x0': res.x[0] - res.x[3],
-            'y0': res.x[1] - res.x[3],
-            'x1': res.x[0] + res.x[3],
-            'y1': res.x[1] + res.x[3],
+            'x0': x0 - res.x[3],
+            'y0': y0 - res.x[3],
+            'x1': x0 + res.x[3],
+            'y1': y0 + res.x[3],
             'line': {'color': 'rgba(50, 171, 96, 1)'}
 }]
 py.iplot(fig)
+
+xx.shape
+u.shape
+fig = ff.create_quiver(xx, yy, u[:grid.ndiv, :grid.ndiv], v[:grid.ndiv, :grid.ndiv], scale=5)
+fig.layout = lyt
+fig.layout.shapes = [{
+            'type': 'circle',
+            'xref': 'x',
+            'yref': 'y',
+            'x0': x0 - res.x[3],
+            'y0': y0 - res.x[3],
+            'x1': x0 + res.x[3],
+            'y1': y0 + res.x[3],
+            'line': {'color': 'rgba(50, 171, 96, 1)'}
+}]
+py.iplot(fig)
+
+
+
+# Simulation from attractor
+
+
+NSTEPS = 100
+NSAMPLES = 100
+dt = 0.1 * grid.binsize / np.mean(np.sqrt(u**2 + v**2))
+
+x = np.zeros((NSTEPS, NSAMPLES))
+y = np.zeros((NSTEPS, NSAMPLES))
+
+x[0] = x0 + np.random.random(size=NSAMPLES) * grid.binsize
+y[0] = y0 + np.random.random(size=NSAMPLES) * grid.binsize
+
+for t in range(1, NSTEPS):
+    ii, jj = bin_index(x[t-1], y[t-1])
+    mask = np.logical_and(ii < grid.ndiv, jj < grid.ndiv)
+    x[t][mask] = x[t-1][mask] + u[ii[mask], jj[mask]] * dt + np.random.normal(scale=grid.binsize, size=np.sum(mask))
+    y[t][mask] = x[t-1][mask] + v[ii[mask], jj[mask]] * dt + np.random.normal(scale=grid.binsize, size=np.sum(mask))
+
+    x[t][~mask] = x[t-1][~mask]
+    y[t][~mask] = y[t-1][~mask]
+
+
+data = []
+
+for i in range(NSAMPLES):
+    data.append(Scatter(x=x.T[i], y=y.T[i], name=i))
+
+
+py.iplot(data)
+A
+p = density(x[-1], y[-1])
+grid.heatmap(p)

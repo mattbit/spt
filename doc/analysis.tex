@@ -1,0 +1,147 @@
+\documentclass[14pt,a4paper]{article}
+
+\usepackage{amsmath,amssymb,bm}
+
+\title{Analysis of super-resolution single particle trajectories}
+\author{Matteo Dora \mbox{matteo.dora@polito.it}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+
+\end{abstract}
+
+\section{Introduction}
+
+The analysis was conducted on a dataset consisting in $\sim 350 000$ datapoints belonging to $\sim 20 000$ different trajectories sampled at 125 ms.
+
+@todo: image of the datapoint domain (bin 100 nm)
+
+At the microscopic level the motion of the molecules is described by the Langevin equation, which in the case of biological processes we are interested in can be considered in its large friction limit (Smoluchowski's equation)
+
+\begin{equation} \label{eq:smoluchowski}
+\dot{\bm{x}} = \frac{\bm{F}(\bm{x})}{\gamma} + \sqrt{2D} \dot{\bm{w}}
+\end{equation}
+\\
+where $\bm{F}(\bm{x})$ is the drift force exerted on the particle at position $\bm{x}$, $\gamma$ is the friction coefficient, $D$ is the diffusion coefficient and $\bm{w}(t)$ is a two-dimensional Wiener process. At the microscopic level we expect the diffusion to be due to thermal agitation and we can consider it isotropic.
+
+However, the empirical data have a finite resolution in space and time due to obvious limits of the acquisition device. It is thus not possible to recover the microscopic model, since we miss information about the local behaviour both in space (e.g. the presence of microscopic obstacles) and time (e.g. thermal fluctuations are much faster than the measuring timescale). Yet we can build a coarse-grained model transforming eq. \ref{eq:smoluchowski} into the effective stochastic equation \cite{hoze2012} \cite{hoze2014}
+
+\begin{equation} \label{eq:coarse-grained}
+\dot{\bm{x}} = \bm{a}(\bm{x}) + \sqrt{2}\bm{B} \dot{\bm{w}}
+\end{equation}
+\\
+where $\bm{a}(\bm{x})$ is the effective drift field and $\bm{D} \equiv \bm{B}^T\bm{B}$ is the effective diffusion tensor. Note that in this coarse-grained model the diffusion coefficient cannot be considered isotropic because it takes into account the microscopic local features (e.g. obstacles).
+
+\section{Reconstructing the effective drift field and diffusion tensor}
+
+It is possible to reconstruct the effective drift and diffusion tensor of the coarse-grained model of eq. \ref{eq:coarse-grained} from the trajectories \cite{hoze2014} \cite{schuss}
+
+\begin{align}
+a^i(\bm{x}) &= \lim_{\Delta t \to 0}\frac{\mathbb{E}\left[x^i(t + \Delta t) - x^i(t) \mid \bm{x}(t) = \bm{x}\right]}{\Delta t} \label{eq:drift}\\
+2D^{ij}(\bm{x}) &= \lim_{\Delta t \to 0}\frac{\mathbb{E}\left[\left(x^i(t + \Delta t) - x^i(t)\right)\left(x^j(t + \Delta t) - x^j(t)\right) \mid \bm{x}(t) = \bm{x}\right]}{\Delta t} \label{eq:diff}
+\end{align}
+where the expected value is taken on the trajectories passing through $\bm{x}$ at time $t$.
+
+We can translate eq. \ref{eq:drift} and \ref{eq:diff} into statistical estimators by grouping the trajectories in a small neighbourhood of $\bm{x}$ and then performing the average. For convenience we choose to divide the space using a grid of identical square bins $S_l(\bm{x})$ characterized by side $l$ and center $\bm{x}$.
+
+It is convenient to define $\Delta \bm{x}_k(t_m) \equiv \bm{x}_k(t_m + \Delta t) - \bm{x}_k(t_m)$, i.e the $m$-th step of the trajectory $k$. The estimators can then be defined as
+
+\begin{align}
+\hat{a}^i({\bm{x}}) &= \frac{1}{N} \sum_{\bm{x}_k(t_m) \in S_l(\bm{x})} \frac{\Delta x_k^i(t_m)}{\Delta t} \label{eq:drift-estimator} \\
+\hat{D}^{ij} &= \frac{1}{2} \frac{1}{N} \sum_{\bm{x}_k(t_m) \in S_l(\bm{x})}\frac{\Delta x_k^i(t_m) \Delta x_k^j(t_m)}{\Delta t} \label{eq:diff-estimator}
+\end{align}
+where $N$ is the number of steps falling into the square $S_l(\bm{x})$.
+
+\subsection{Estimator error}
+
+It is quite simple to determine the error of the estimator if we consider a discretized version of eq. \ref{eq:coarse-grained} (see appendix of \cite{hoze2012})
+
+\begin{equation}
+\Delta \bm{x}(t_m) = \bm{a}(\bm{x}) \Delta t + \sqrt{2 \Delta t} \bm{B} \bm{\eta}_m
+\end{equation}
+where $\bm{\eta}_m$ is a two-dimensional white Gaussian noise with unit variance.
+
+The estimator error for the drift in the bin $S_l(\bm{x})$ containing $N$ steps is then
+
+\begin{align}
+\bm{e_a}(\bm{x}) &= \hat{\bm{a}}(\bm{x}) - \bm{a}(\bm{x}) = \frac{1}{N} \sqrt{\frac{2}{\Delta t}} \bm{B} \sum_{k = 1}^N \bm{\eta}_k
+\end{align}
+that is a normally distributed random variable with covariance matrix $\frac{2 \bm{D}}{N \Delta t}$.
+
+A similar result holds for the diffusion estimator. Considering the case of isotropic diffusion for simplicity
+
+\begin{align}
+\hat{D}(\bm{x}) &= D(\bm{x}) \frac{1}{N} \sum_{k = 1}^N \left(\eta_k\right)^2 + O(\sqrt{\Delta t})
+\end{align}
+which is a random variable with mean $D$ and variance inversely proportional to $N$.
+
+In both cases the standard error is inversely proportional to $\sqrt{N}$, so we can control it by choosing a proper partitioning and by discarding the bins that contain a number of datapoints lower than a given threshold.
+
+
+\section{Attractors in the drift field}
+
+An interesting feature of the drift field is represented by attractors, so the first purpose in the analysis of the data is to locate them and identify their properties.
+
+We give a description of the attractors using the methods described in \cite{hoze2012}. First of all, we imagine that the effective drift field $\bm{a}(\bm{x})$ is generated from a potential $U(\bm{x})$
+
+\begin{equation}
+\bm{a}(\bm{x}) = -\nabla U(\bm{x}).
+\end{equation}
+
+In this setting a point attractor $(x_0, y_0)$ is a local minima of the potential. If we assume the well to be circular, we can describe the potential to the lowest order in $(x - x_0), (y - y_0)$ in a small neighbourhood of the attractor by
+
+\begin{equation} \label{eq:well}
+U(x, y) = U_0 + \frac{W}{r^2}\left(x - x_0\right)^2 + \frac{W}{r^2}\left(y - y_0\right)^2 + \text{higher order terms}
+\end{equation}
+where the weight $W$ represents the potential difference at a distance $r$ from $(x_0, y_0)$, which can be used as an indicator of the strength of the potential well.
+
+We can fit eq. \ref{eq:well} with respect to the empirical drift $\bm{a}(x, y)$ using the least squares method. The sum of squared residuals is
+
+\begin{equation} \label{eq:residue}
+Res = \sum_{k = 1}^N \| \bm{a}(x_k, y_k) + \nabla U(x_k, y_k) \|^2
+\end{equation}
+
+Considering $r$ fixed we can determine the value of $W$ that minimizes the error. Eq. \ref{eq:residue} turns out to be easy to handle analytically, leading to
+
+\begin{equation}
+W = - \frac{r^2}{2} \frac{\sum_{k = 1}^N a^x(x_k, y_k) x_k + a^y(x_k, y_k) y_k}{\sum_{k = 1}^N x_k^2 + y_k^2}
+\end{equation}
+
+\subsection{Locating the attractors}
+
+In the previous section we have given a characterisation of the attractors, but we have yet to locate them in the space. To do that one could scan systematically over the data to find the regions matching the features defined above, as described in \cite{hoze2012}.
+
+Here instead we try a different approach by simulating the effective drift field. Starting from a uniform distribution of the particles, we identify as attractors the bins showing the highest particle density after a sufficiently long simulation time.
+
+To simulate the drift field we have to do some preliminary work. First of all, the trajectories do not cover the whole space, so there are regions where we are unable to estimate the drift. Moreover, we filtered out the bins that do not reach a minimum threshold of samples, adding more holes in the domain of the drift field.
+We can identify two main kinds of artifacts which would hinder the simulation: bins such that all their 4 neighbours have an undefined field (isolated bins) and bins with undefined field surrounded by well defined bins (holes). Running the numerical simulation in this discontinuous field would not be effective, since the particles would get trapped in the isolated bins or holes.
+
+To account for this, we manipulate the empirical field by filtering out the isolated bins and then smoothening the field to eliminate the holes. For the smoothening part we use a Gaussian kernel defined as
+
+\begin{equation}
+K = \frac{1}{16} \begin{bmatrix} 1 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 1\end{bmatrix}
+\end{equation}
+
+\section{Pathways connecting attractors}
+
+
+
+
+\begin{thebibliography}{9}
+\bibitem{hoze2012}
+Hoz\'e N, Nair D, Hosy E, Sieben C, Manley S, et al. 2012. \textit{Heterogeneity of receptor trafficking and molecular interactions revealed by superresolution analysis of live cell imaging.} PNAS 109:17052–57
+
+\bibitem{hoze2014}
+Hoz\'e N, Holcman D. 2014. \textit{Residence times of receptors in dendritic spines analyzed by stochastic simulations in empirical domains.} Biophys. J. 107:3008–17
+
+\bibitem{schuss}
+Schuss, Z. 2010. \textit{Theory and applications of stochastic processes: an analytical approach.} Springer, New York.
+
+\end{thebibliography}
+
+
+
+\end{document}
