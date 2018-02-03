@@ -68,7 +68,7 @@ class Grid(object):
 
         return z
 
-    def heatmap(self, data, title="", threshold=0):
+    def heatmap(self, data, title="No title", threshold=0):
         if callable(data):
             z = self.apply(data, threshold)
         else:
@@ -84,17 +84,19 @@ class Grid(object):
         return np.nansum(n)
 
     def plot(self, trace, title):
-        lyt = Layout(
-            title=title,
-            height=600,
-            width=600,
+        lyt = self._layout()
+        lyt.title = title
+        fig = Figure(data=[trace], layout=lyt)
+        py.plot(fig, filename=title + ".html")
+
+    def _layout(self):
+        return Layout(
+            height=1000,
+            width=1000,
             yaxis=dict(scaleanchor="x", showgrid=True, zeroline=False,
-                       autotick=False, dtick=1, tick0=-0.5,
+                       autotick=False, ticks="", dtick=1, tick0=-0.5,
                        showticklabels=False),
             xaxis=dict(showgrid=True, zeroline=False,
-                       autotick=False, dtick=1, tick0=-0.5,
+                       autotick=False, ticks="", dtick=1, tick0=-0.5,
                        showticklabels=False)
         )
-
-        fig = Figure(data=[trace], layout=lyt)
-        py.plot(fig)

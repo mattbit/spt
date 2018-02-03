@@ -5,6 +5,8 @@ from grid import Grid
 from utils import estimate_drift
 import plotly.offline as py
 import plotly.figure_factory as ff
+from plotly.plotly import image as pyimg
+import scipy.ndimage.filters as filters
 from plotly.graph_objs import Heatmap, Layout, Figure, Scatter, Contour
 
 DATAFILE = "data_125ms.csv"
@@ -15,156 +17,10 @@ data = pandas.read_csv(DATAFILE, sep=";", decimal=",",
                        usecols=["track id", "x", "y", "t"])
 
 
-grid = Grid(data, binsize=0.5)
-
-
-# Add threshold and filter out the isolated bins
-THRESHOLD = 50
-
-tdata = grid.data.groupby("bin").filter(lambda x: len(x) > THRESHOLD)
-bins = sorted(tdata["bin"].unique())
-filtered_bins = []
-
-
-for b in bins:
-    if ((b[0] + 1, b[1]) in bins or (b[0] - 1, b[1]) in bins
-       or (b[0], b[1] + 1) in bins or (b[0], b[1] - 1) in bins):
-       filtered_bins.append(b)
-
-
-def neighbours(b):
-    return [(b[0] + 1, b[1]), (b[0] - 1, b[1]),
-            (b[0], b[1] + 1), (b[0], b[1] - 1),
-            (b[0] + 1, b[1] + 1), (b[0] + 1, b[1] - 1),
-            (b[0] - 1, b[1] + 1), (b[0] - 1, b[1] - 1)]
-
-extended_bins = filtered_bins.copy()
-for b in filtered_bins:
-    for n in neighbours(b):
-        if n not in extended_bins:
-            extended_bins.append(n)
-
-z = np.full([grid.ndiv+1, grid.ndiv+1], np.nan)
-for b in extended_bins:
-    z[b] = 1
-
-for b in filtered_bins:
-    z[b] += 1
-
-grid.plot(Heatmap(z=z.T, colorscale=[[0, "rgb(120,120,120)"], [1, "rgb(0,0,0)"]]), "Domain")
-
-# Estimate the drift field
-xx, yy = np.meshgrid(grid.x, grid.y, indexing="ij")
-
-u = np.zeros((grid.ndiv + 1, grid.ndiv + 1))
-v = u.copy()
-
-for b, data in grid.data.groupby("bin"):
-    if b not in filtered_bins:
-        continue
-
-    drift = np.nanmean(data.loc[:, ("step_x", "step_y")].values,
-                       axis=0) / TIMESTEP
-
-    u[b] = drift[0]
-    v[b] = drift[1]
-
-
-grid.heatmap(np.sqrt(u**2 + v**2), "Estimated drift")
-
-# Smooth the field
-
-us = np.full((grid.ndiv+1, grid.ndiv+1), np.nan)
-vs = us.copy()
-
-K = 1/16 * np.array([[1, 2, 1],
-                     [2, 4, 2],
-                     [1, 2, 2]])
-
-for b in extended_bins:
-    ku = np.zeros((3, 3))
-    kv = np.zeros((3, 3))
-    for i in [-1, 0, 1]:
-        for j in [-1, 0, 1]:
-            if (b[0] + i >= 0 and b[1] + j >= 0
-                and b[0] + i < grid.ndiv and b[1] + j < grid.ndiv):
-                ku[i, j] = u[b[0] + i, b[1] + j]
-                kv[i, j] = v[b[0] + i, b[1] + j]
-
-    us[b] = np.sum(ku*K)
-    vs[b] = np.sum(kv*K)
-
-    # nsum_u = 0
-    # nsum_v = 0
-    # for n in neighbours(b):
-    #     if b[0] < grid.ndiv and b[1] < grid.ndiv:
-    #         nsum_u += u[n]
-    #         nsum_v += v[n]
-    #
-    # us[b] = 0.5*u[b] + 0.125*nsum_u
-    # vs[b] = 0.5*v[b] + 0.125*nsum_v
-
-
-# Use 0 instead of NaN to get a better plot.
-plot_us = us.copy()
-plot_us[np.isnan(plot_us)] = 0.
-plot_vs = vs.copy()
-plot_vs[np.isnan(plot_vs)] = 0.
-
-grid.heatmap(np.sqrt(plot_us**2 + plot_vs**2), "Smoothed drift field")
-
-
-# Now wait for last year.
-
-def bin_index(x, y):
-    ii = ((x - x_min) // grid.binsize).astype(int, copy=False)
-    jj = ((y - y_min) // grid.binsize).astype(int, copy=False)
-
-    return ii, jj
-
-
-def density(x, y):
-    h, _, _ = np.histogram2d(x[~np.isnan(x)], y[~np.isnan(y)],
-                  bins=grid.ndiv,
-                  range=[[x_min, x_min + grid.L],
-                         [y_min, y_min + grid.L]],
-                  normed=True)
-
-    return h
-
-
-dt = 0.1 * grid.binsize / np.mean(np.sqrt(u**2 + v**2))
-x_min = min(grid.data["x"])
-y_min = min(grid.data["y"])
-
-x = x_min + np.random.random(1000000) * grid.L
-y = y_min + np.random.random(1000000) * grid.L
-
-for n in range(500):
-    x = x[~np.isnan(x)]
-    y = y[~np.isnan(y)]
-    ii, jj = bin_index(x, y)
-    mask = np.logical_and(ii < grid.ndiv, jj < grid.ndiv)
-    x[mask] += us[ii[mask], jj[mask]] * dt
-    y[mask] += vs[ii[mask], jj[mask]] * dt
-
-p = density(x, y)
-grid.heatmap(p)
-
-
-
-# Attractors with the biggest basin.
-
-bins = np.empty((grid.ndiv, grid.ndiv), dtype=tuple)
-for i in range(grid.ndiv):
-    for j in range(grid.ndiv):
-        bins[i, j] = (i, j)
-
-p.shape
-bins.shape
-
-# Select the biggest attractors.
-bins[p > 0.05]
+# %%
+#####################################################################
+# Utilities.                                                        #
+#####################################################################
 
 def mask1d(array, x, r=5):
     i_min = max(x - r, 0)
@@ -180,6 +36,169 @@ def mask2d(array, x, r=5):
     j_max = min(x[1] + r, len(array))
 
     return array[i_min:i_max, j_min:j_max]
+
+
+def neighbours(b):
+    return [(b[0] + 1, b[1]), (b[0] - 1, b[1]),
+            (b[0], b[1] + 1), (b[0], b[1] - 1),
+            (b[0] + 1, b[1] + 1), (b[0] + 1, b[1] - 1),
+            (b[0] - 1, b[1] + 1), (b[0] - 1, b[1] - 1)]
+
+
+def bin_index(x, y):
+    ii = ((x - x_min) // grid.binsize).astype(int, copy=False)
+    jj = ((y - y_min) // grid.binsize).astype(int, copy=False)
+
+    return ii, jj
+
+
+def density(x, y):
+    h, _, _ = np.histogram2d(x[~np.isnan(x)], y[~np.isnan(y)],
+                  bins=grid.ndiv,
+                  range=[[x_min, x_min + grid.L],
+                         [y_min, y_min + grid.L]])
+
+    return h
+
+# %%
+#####################################################################
+# Recover the drift field.                                          #
+#####################################################################
+
+grid = Grid(data, binsize=0.5)
+THRESHOLD = 50
+
+tdata = grid.data.groupby("bin").filter(lambda x: len(x) > THRESHOLD)
+bins = sorted(tdata["bin"].unique())
+
+# Filter out the isolated bins.
+isolated_bins = []
+for b in bins:
+    if set(neighbours(b)).isdisjoint(bins):
+        isolated_bins.append(b)
+
+filtered_bins = list(set(bins) - set(isolated_bins))
+
+# Extend the bins considering their neighbours.
+extended_bins = []
+for b in filtered_bins:
+    extended_bins.append(b)
+    for n in neighbours(b):
+        if n not in extended_bins:
+            extended_bins.append(n)
+
+z = np.full([grid.ndiv+1, grid.ndiv+1], np.nan)
+for b in extended_bins:
+    z[b] = -1
+
+for b in list(set(bins) - set(isolated_bins)):
+    z[b] = -2
+
+for b in isolated_bins:
+    z[b] = 0
+
+# Plot
+fig = Figure(data=[Heatmap(z=z[0:60, 15:75].T, colorscale="Portland",
+                           showscale=False)],
+             layout=grid._layout())
+pyimg.save_as(fig, filename="img/03_bins.png")
+
+# Estimate the drift field
+xx, yy = np.meshgrid(grid.x, grid.y, indexing="ij")
+u = np.zeros((grid.ndiv + 1, grid.ndiv + 1))
+v = u.copy()
+
+for b, data in grid.data.groupby("bin"):
+    if b not in filtered_bins:
+        continue
+
+    drift = np.nanmean(data.loc[:, ("step_x", "step_y")].values,
+                       axis=0) / TIMESTEP
+
+    u[b] = drift[0]
+    v[b] = drift[1]
+
+# Plot
+drift_norm = np.sqrt(u**2 + v**2)[0:60, 15:75]
+lyt = grid._layout()
+fig = Figure(data=[Heatmap(z=drift_norm.T, zmin=0, zmax=0.3,
+                   colorscale="Portland")],
+             layout=lyt)
+pyimg.save_as(fig, filename="img/03_empirical_drift.png")
+
+
+# Smoothen the field
+K = 1/16 * np.array([[1, 2, 1],
+                     [2, 4, 2],
+                     [1, 2, 2]])
+
+us = filters.convolve(u, K, mode="constant", cval=0.0)
+vs = filters.convolve(v, K, mode="constant", cval=0.0)
+
+
+# Plot
+smooth_drift = np.sqrt(us**2 + vs**2)[0:60, 15:75]
+fig = Figure(data=[Heatmap(z=smooth_drift.T, zmin=0, zmax=0.3,
+                   colorscale="Portland")],
+             layout=grid._layout())
+pyimg.save_as(fig, filename="img/03_smooth_drift.png")
+
+
+# %%
+#####################################################################
+# Run the simulation.                                               #
+#####################################################################
+
+dt = 0.1 * grid.binsize / np.mean(np.sqrt(us**2 + vs**2))
+x_min = min(grid.data["x"])
+y_min = min(grid.data["y"])
+
+# Uniformly spaced initial position
+xr, yr = np.meshgrid(np.linspace(x_min, x_min + grid.L, num=10*grid.ndiv),
+                     np.linspace(y_min, y_min + grid.L, num=10*grid.ndiv))
+
+x = xr.ravel()
+y = yr.ravel()
+
+p = density(x, y)[0:60, 15:75]
+fig = Figure(data=[Heatmap(z=p.T, zmin=0, zmax=5000, colorscale="Portland")],
+             layout=grid._layout())
+pyimg.save_as(fig, filename="img/03_000_sim.png")
+
+for n in range(201):
+    x = x[~np.isnan(x)]
+    y = y[~np.isnan(y)]
+    ii, jj = bin_index(x, y)
+    mask = np.logical_and(ii < grid.ndiv, jj < grid.ndiv)
+    x[mask] += us[ii[mask], jj[mask]] * dt
+    y[mask] += vs[ii[mask], jj[mask]] * dt
+
+    if n in [2, 5, 10, 200]:
+        p = density(x, y)[0:60, 15:75]
+        fig = Figure(data=[Heatmap(z=p.T, zmin=0, zmax=5000, colorscale="Portland")],
+                     layout=grid._layout())
+        pyimg.save_as(fig, filename="img/03_{:03}_sim.png".format(n))
+
+
+# %%
+# Attractors with the biggest basin.
+
+bins = np.empty((grid.ndiv, grid.ndiv), dtype=tuple)
+for i in range(grid.ndiv):
+    for j in range(grid.ndiv):
+        bins[i, j] = (i, j)
+
+p = density(x, y)
+bins.shape
+
+# Select the biggest attractors.
+attractors = bins[p > 10000]
+
+
+xx, yy = np.meshgrid(grid.x, grid.y)
+fig = ff.create_quiver(xx, yy, u, v, scale=5)
+
+
 
 A = bins[p > 0.05][0]
 

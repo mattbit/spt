@@ -1,6 +1,10 @@
-\documentclass[14pt,a4paper]{article}
+\documentclass[a4paper]{article}
 
 \usepackage{amsmath,amssymb,bm}
+\usepackage[british]{babel}
+\usepackage{xltxtra}
+
+\setmainfont[Ligatures=TeX]{PT Serif}
 
 \title{Analysis of super-resolution single particle trajectories}
 \author{Matteo Dora \mbox{matteo.dora@polito.it}}
@@ -8,10 +12,6 @@
 
 \begin{document}
 \maketitle
-
-\begin{abstract}
-
-\end{abstract}
 
 \section{Introduction}
 
@@ -117,7 +117,7 @@ In the previous section we have given a characterisation of the attractors, but 
 Here instead we try a different approach by simulating the effective drift field. Starting from a uniform distribution of the particles, we identify as attractors the bins showing the highest particle density after a sufficiently long simulation time.
 
 To simulate the drift field we have to do some preliminary work. First of all, the trajectories do not cover the whole space, so there are regions where we are unable to estimate the drift. Moreover, we filtered out the bins that do not reach a minimum threshold of samples, adding more holes in the domain of the drift field.
-We can identify two main kinds of artifacts which would hinder the simulation: bins such that all their 4 neighbours have an undefined field (isolated bins) and bins with undefined field surrounded by well defined bins (holes). Running the numerical simulation in this discontinuous field would not be effective, since the particles would get trapped in the isolated bins or holes.
+We can identify two main kinds of artifacts which would hinder the simulation: bins such that all their 8 neighbours have an undefined field (isolated bins) and bins with undefined field surrounded by well defined bins (holes). Running the numerical simulation in this discontinuous field would not be effective, since the particles would get trapped in the isolated bins or holes.
 
 To account for this, we manipulate the empirical field by filtering out the isolated bins and then smoothening the field to eliminate the holes. For the smoothening part we use a Gaussian kernel defined as
 
@@ -125,6 +125,24 @@ To account for this, we manipulate the empirical field by filtering out the isol
 K = \frac{1}{16} \begin{bmatrix} 1 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 1\end{bmatrix}
 \end{equation}
 
+See figure @todo for an example of the procedure.
+@todo: insert figure of field and filtering.
+
+The simulated trajectories are obtained by the forward Euler's scheme
+
+\begin{equation}
+\bm{x}_{n+1} = \bm{x}_n + \bm{\tilde{a}}(\bm{x_n})\Delta t
+\end{equation}
+where $\bm{\tilde{a}}$ is the filtered and smoothed drift field.
+
+We can choose a quite large simulation timestep as the dynamics is deterministic. The coarse grained field has a spatial resolution of $l$ corresponding to the side of the square bins, so we are interested in having, on average, a step size close to the order of $l$. We choose
+
+\begin{equation}
+\Delta t = \frac{1}{10} \frac{l}{\langle|\bm{\tilde{a}}|\rangle}
+\end{equation}
+where $\langle\cdot\rangle$ denotes the mean over the whole spatial domain of $\bm{\tilde{a}}$.
+
+The results of the simulation are shown in @todo: add figure.
 \section{Pathways connecting attractors}
 
 
