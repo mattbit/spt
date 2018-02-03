@@ -21,7 +21,7 @@ data = pandas.read_csv(DATAFILE, sep=";", decimal=",",
 # Create the grid object.                                           #
 #####################################################################
 
-grid = Grid(data, binsize=0.5)
+grid = Grid(data, binsize=0.1)
 
 # %%
 #####################################################################
@@ -63,8 +63,7 @@ py.iplot([Histogram(x=steps_y, histnorm="probability")])
 # Plot a heatmap of data point count.                               #
 #####################################################################
 
-grid.set_binsize(0.5)
-grid.heatmap(len, "Number of datapoints", threshold=100)
+grid.heatmap(len, "Number of datapoints", threshold=1)
 
 # %%
 #####################################################################

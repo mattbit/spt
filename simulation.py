@@ -122,7 +122,7 @@ for b, data in grid.data.groupby("bin"):
 drift_norm = np.sqrt(u**2 + v**2)[0:60, 15:75]
 lyt = grid._layout()
 fig = Figure(data=[Heatmap(z=drift_norm.T, zmin=0, zmax=0.3,
-                   colorscale="Portland")],
+                   colorscale="Portland", showscale=False)],
              layout=lyt)
 pyimg.save_as(fig, filename="img/03_empirical_drift.png")
 
@@ -139,7 +139,7 @@ vs = filters.convolve(v, K, mode="constant", cval=0.0)
 # Plot
 smooth_drift = np.sqrt(us**2 + vs**2)[0:60, 15:75]
 fig = Figure(data=[Heatmap(z=smooth_drift.T, zmin=0, zmax=0.3,
-                   colorscale="Portland")],
+                   colorscale="Portland", showscale=False)],
              layout=grid._layout())
 pyimg.save_as(fig, filename="img/03_smooth_drift.png")
 
@@ -161,9 +161,10 @@ x = xr.ravel()
 y = yr.ravel()
 
 p = density(x, y)[0:60, 15:75]
-fig = Figure(data=[Heatmap(z=p.T, zmin=0, zmax=5000, colorscale="Portland")],
+fig = Figure(data=[Heatmap(z=p.T, zmin=0, zmax=5000, colorscale="Portland", showscale=False)],
              layout=grid._layout())
 pyimg.save_as(fig, filename="img/03_000_sim.png")
+
 
 for n in range(201):
     x = x[~np.isnan(x)]
@@ -175,7 +176,7 @@ for n in range(201):
 
     if n in [2, 5, 10, 200]:
         p = density(x, y)[0:60, 15:75]
-        fig = Figure(data=[Heatmap(z=p.T, zmin=0, zmax=5000, colorscale="Portland")],
+        fig = Figure(data=[Heatmap(z=p.T, zmin=0, zmax=5000, colorscale="Portland", showscale=False)],
                      layout=grid._layout())
         pyimg.save_as(fig, filename="img/03_{:03}_sim.png".format(n))
 
@@ -194,14 +195,28 @@ bins.shape
 # Select the biggest attractors.
 attractors = bins[p > 10000]
 
+attractors[0]
+
+lyt = Layout(
+    height=1000,
+    width=1000,
+    yaxis=dict(scaleanchor="x", showgrid=True, zeroline=False,
+               autotick=False, ticks="", dtick=0.5, tick0=x_min,
+               showticklabels=False),
+    xaxis=dict(showgrid=True, zeroline=False,
+               autotick=False, ticks="", dtick=0.5, tick0=y_min,
+               showticklabels=False))
 
 xx, yy = np.meshgrid(grid.x, grid.y)
-fig = ff.create_quiver(xx, yy, u, v, scale=5)
+fig = ff.create_quiver(xx[0:60, 30:90], yy[0:60, 30:90], u[0:60, 30:90], v[0:60, 30:90], scale=5)
+fig.layout = lyt
+py.iplot(fig)
 
+grid.heatmap(u[0:60, 30:90])
 
+A = (34, 23)
 
-A = bins[p > 0.05][0]
-
+xx, yy = np.meshgrid(grid.x, grid.y)
 
 xxm = mask2d(xx, A, 10)
 yym = mask2d(yy, A, 10)
@@ -219,8 +234,7 @@ lyt = Layout(
                showticklabels=False),
     xaxis=dict(showgrid=True, zeroline=False,
                autotick=False, dtick=grid.binsize, tick0=y_min,
-               showticklabels=False)
-)
+               showticklabels=False))
 
 fig = ff.create_quiver(xxm, yym, um, vm, scale=2)
 fig["data"].append(Scatter(x=[grid.x[A[0]]], y=[grid.y[A[1]]], mode="markers"))

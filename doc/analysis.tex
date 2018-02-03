@@ -2,12 +2,45 @@
 
 \usepackage{amsmath,amssymb,bm}
 \usepackage[british]{babel}
+\usepackage{graphicx}
+\usepackage{titlesec}
 \usepackage{xltxtra}
+\usepackage{titling}
+\usepackage[font=sf]{caption}
+\usepackage{subfig}
+\usepackage{siunitx}
 
 \setmainfont[Ligatures=TeX]{PT Serif}
+\setsansfont[Ligatures=TeX]{PT Sans}
 
-\title{Analysis of super-resolution single particle trajectories}
-\author{Matteo Dora \mbox{matteo.dora@polito.it}}
+\captionsetup[subfigure]{font=sf}
+
+\titleformat*{\section}{\Large\bfseries\sffamily}
+
+
+\pretitle{
+	\vspace{-60pt}
+  \noindent\rule{\linewidth}{1pt}\vspace{15pt}
+	\fontsize{21}{25}\sffamily\bfseries
+}
+
+\posttitle{\par\vskip 15pt}
+
+\preauthor{
+  \noindent\fontsize{14}{20}\sffamily\noindent
+}
+
+\postauthor{
+	\vspace{10pt}
+  \par\noindent\rule{\linewidth}{1pt}\vspace{15pt}
+	\vspace{20pt}
+}
+
+% Here we are.
+
+\title{Statistical analysis of super-resolution single particle trajectories}
+\author{Matteo Dora \newline\newline \small{\mbox{matteo.dora@polito.it}}}
+
 \date{\today}
 
 \begin{document}
@@ -15,9 +48,15 @@
 
 \section{Introduction}
 
-The analysis was conducted on a dataset consisting in $\sim 350 000$ datapoints belonging to $\sim 20 000$ different trajectories sampled at 125 ms.
+A dataset of single particle trajectories sampled at \SI{125}{ms} was analyzed. The goal was to recover a description of the physical and dynamical properties of the particles (e.g. diffusion, drift field) by means of statistical analysis. In particular I was interested in studying the presence of attractors in the force field and of dynamical pathways linking the attractors.
 
-@todo: image of the datapoint domain (bin 100 nm)
+\begin{figure}[h]
+  \includegraphics[width=\linewidth]{img/01_datapoints.png}
+  \caption{Dataset points at a resolution of \SI{100}{nm}}
+  \label{fig:datapoints}
+\end{figure}
+
+The dataset consisted in \SI{\sim 350 000} datapoints belonging to \SI{\sim 20 000} trajectories. The distribution of the datapoints is visible in figure \ref{fig:datapoints}.
 
 At the microscopic level the motion of the molecules is described by the Langevin equation, which in the case of biological processes we are interested in can be considered in its large friction limit (Smoluchowski's equation)
 
@@ -45,7 +84,7 @@ a^i(\bm{x}) &= \lim_{\Delta t \to 0}\frac{\mathbb{E}\left[x^i(t + \Delta t) - x^
 \end{align}
 where the expected value is taken on the trajectories passing through $\bm{x}$ at time $t$.
 
-We can translate eq. \ref{eq:drift} and \ref{eq:diff} into statistical estimators by grouping the trajectories in a small neighbourhood of $\bm{x}$ and then performing the average. For convenience we choose to divide the space using a grid of identical square bins $S_l(\bm{x})$ characterized by side $l$ and center $\bm{x}$.
+We can translate eq. \ref{eq:drift} and \ref{eq:diff} into statistical estimators by grouping the trajectories in a small neighbourhood of $\bm{x}$ and then performing the average. For convenience I chose to divide the space using a grid of identical square bins $S_l(\bm{x})$ characterized by side $l$ and center $\bm{x}$.
 
 It is convenient to define $\Delta \bm{x}_k(t_m) \equiv \bm{x}_k(t_m + \Delta t) - \bm{x}_k(t_m)$, i.e the $m$-th step of the trajectory $k$. The estimators can then be defined as
 
@@ -85,7 +124,7 @@ In both cases the standard error is inversely proportional to $\sqrt{N}$, so we 
 
 An interesting feature of the drift field is represented by attractors, so the first purpose in the analysis of the data is to locate them and identify their properties.
 
-We give a description of the attractors using the methods described in \cite{hoze2012}. First of all, we imagine that the effective drift field $\bm{a}(\bm{x})$ is generated from a potential $U(\bm{x})$
+We can give a description of the attractors using the methods described in \cite{hoze2012}. First of all, we imagine that the effective drift field $\bm{a}(\bm{x})$ is generated from a potential $U(\bm{x})$
 
 \begin{equation}
 \bm{a}(\bm{x}) = -\nabla U(\bm{x}).
@@ -103,7 +142,6 @@ We can fit eq. \ref{eq:well} with respect to the empirical drift $\bm{a}(x, y)$ 
 \begin{equation} \label{eq:residue}
 Res = \sum_{k = 1}^N \| \bm{a}(x_k, y_k) + \nabla U(x_k, y_k) \|^2
 \end{equation}
-
 Considering $r$ fixed we can determine the value of $W$ that minimizes the error. Eq. \ref{eq:residue} turns out to be easy to handle analytically, leading to
 
 \begin{equation}
@@ -112,37 +150,52 @@ W = - \frac{r^2}{2} \frac{\sum_{k = 1}^N a^x(x_k, y_k) x_k + a^y(x_k, y_k) y_k}{
 
 \subsection{Locating the attractors}
 
-In the previous section we have given a characterisation of the attractors, but we have yet to locate them in the space. To do that one could scan systematically over the data to find the regions matching the features defined above, as described in \cite{hoze2012}.
+In the previous section I have given a characterisation of the attractors, but we have yet to locate them in the space. To do that one could scan systematically over the data to find the regions matching the features defined above, as described in \cite{hoze2012}.
 
-Here instead we try a different approach by simulating the effective drift field. Starting from a uniform distribution of the particles, we identify as attractors the bins showing the highest particle density after a sufficiently long simulation time.
+Here instead I tried a different approach by simulating the motion of particles in the effective drift field. Starting from a uniform distribution of the particles, I identify as attractors the bins showing the highest particle density after a sufficiently long simulation time.
 
 To simulate the drift field we have to do some preliminary work. First of all, the trajectories do not cover the whole space, so there are regions where we are unable to estimate the drift. Moreover, we filtered out the bins that do not reach a minimum threshold of samples, adding more holes in the domain of the drift field.
 We can identify two main kinds of artifacts which would hinder the simulation: bins such that all their 8 neighbours have an undefined field (isolated bins) and bins with undefined field surrounded by well defined bins (holes). Running the numerical simulation in this discontinuous field would not be effective, since the particles would get trapped in the isolated bins or holes.
 
-To account for this, we manipulate the empirical field by filtering out the isolated bins and then smoothening the field to eliminate the holes. For the smoothening part we use a Gaussian kernel defined as
-
+To account for this, I manipulated the empirical field by filtering out the isolated bins and then smoothening the field to eliminate the holes. For the smoothening part I used an approximated Gaussian kernel defined as
 \begin{equation}
 K = \frac{1}{16} \begin{bmatrix} 1 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 1\end{bmatrix}
 \end{equation}
 
-See figure @todo for an example of the procedure.
-@todo: insert figure of field and filtering.
 
-The simulated trajectories are obtained by the forward Euler's scheme
+\begin{figure}[htbp] \label{fig:filtering}
+  \subfloat[Estimated field]{\includegraphics[width=0.5\linewidth]{img/03_empirical_drift.png}}
+  \subfloat[Smoothened field]{\includegraphics[width=0.5\linewidth]{img/03_smooth_drift.png}}
+  \caption{The modulus of the drift field before (a) and after (b) the application of the filter in a subregion of the domain.}
+\end{figure}
 
+The simulated trajectories are obtained by forward Euler's scheme
 \begin{equation}
 \bm{x}_{n+1} = \bm{x}_n + \bm{\tilde{a}}(\bm{x_n})\Delta t
 \end{equation}
 where $\bm{\tilde{a}}$ is the filtered and smoothed drift field.
 
-We can choose a quite large simulation timestep as the dynamics is deterministic. The coarse grained field has a spatial resolution of $l$ corresponding to the side of the square bins, so we are interested in having, on average, a step size close to the order of $l$. We choose
-
+We can choose a quite large simulation timestep as the dynamics is deterministic. The coarse grained field has a spatial resolution of $l$ corresponding to the side of the square bins, so we are interested in having, on average, a step size close to the order of $l$. I chose
 \begin{equation}
 \Delta t = \frac{1}{10} \frac{l}{\langle|\bm{\tilde{a}}|\rangle}
 \end{equation}
 where $\langle\cdot\rangle$ denotes the mean over the whole spatial domain of $\bm{\tilde{a}}$.
 
-The results of the simulation are shown in @todo: add figure.
+The results of the simulation are shown in figure \ref{fig:simulation}.
+
+
+\begin{figure}[htbp]
+  \subfloat[t = 0]{\includegraphics[width=0.5\linewidth]{img/03_000_sim.png}}
+  \subfloat[t = 5]{\includegraphics[width=0.5\linewidth]{img/03_005_sim.png}}\\
+  \subfloat[t = 10]{\includegraphics[width=0.5\linewidth]{img/03_010_sim.png}}
+  \subfloat[t = 200]{\includegraphics[width=0.5\linewidth]{img/03_200_sim.png}}
+  \caption{The density of particles evolution with the simulation time in a subregion of the total domain.}
+  \label{fig:simulation}
+\end{figure}
+
+
+
+
 \section{Pathways connecting attractors}
 
 
