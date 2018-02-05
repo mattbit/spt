@@ -151,6 +151,7 @@ W = - \frac{r^2}{2} \frac{\sum_{k = 1}^N a^x(x_k, y_k) x_k + a^y(x_k, y_k) y_k}{
 \end{equation}
 
 \subsection{Locating the attractors}
+\label{sec:attractors}
 
 In the previous section I have given a characterisation of the attractors, but we have yet to locate them in the space. To do that one could scan systematically over the data to find the regions matching the features defined above, as described in \cite{hoze2012}.
 
@@ -160,7 +161,7 @@ To simulate the drift field we have to do some preliminary work. First of all, t
 We can identify two main kinds of artifacts which would hinder the simulation: bins such that all their 8 neighbours have an undefined field (isolated bins) and bins with undefined field surrounded by well defined bins (holes). Running the numerical simulation in this discontinuous field would not be effective, since the particles would get trapped in the isolated bins or holes.
 
 To account for this, I manipulated the empirical field by filtering out the isolated bins and then smoothening the field to eliminate the holes. For the smoothening part I used an approximated Gaussian kernel defined as
-\begin{equation}
+\begin{equation} \label{eq:kernel}
 K = \frac{1}{16} \begin{bmatrix} 1 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 1\end{bmatrix}
 \end{equation}
 
@@ -212,7 +213,7 @@ Because of the non-locality, analyzing directly the drift field seems complicate
 
 From this viewpoint, channels are valleys in the surface defined by the potential function, i.e. they are one-dimension local minima of $U$. Features of this type for a two-dimensional scalar function are well known in computer vision, where ridge (and valley) detection is used to identify the main axis of long objects. Reconstructing the potential function would allow to translate the problem from channel detection to ridge detection, thus inheriting from computer vision an already developed toolset for studying these structures.
 
-\subsection{Reconstructing the potential}
+\subsection{Building the potential}
 
 The empirical field $\bm{a}$ is defined on the square lattice of side $l$ formed by the centres of each bin $S_l$. I indicate with $\bm{a}_{i,j}$ the estimated value of the drift field at row $i$ and column $j$ of the lattice. I similarly define $U$ on a square lattice formed by the middle points between the bin centres. In this way, eq. \ref{eq:conservative} can be represented by the discrete partial derivatives
 \begin{align}
@@ -225,6 +226,12 @@ Fixing an initial condition as $U_{k,m} = c$, it is possible to recover the valu
 U_{i+1,j} = -a^x_{i,j}l + U_{i,j} \\[10pt]
 U_{i,j+1} = -a^y_{i,j}l + U_{i,j}
 \end{align}
+
+For this method to work effectively we need a cluster of connected sites where the field $\bm{a}$ is defined and one initial condition for $U$ is fixed. This is not the case for the rough estimated field, since it is full of holes and discontinuities that would prevent us from building a smooth potential. Note also that for isolated bins we have no possibility of reconstructing the potential. To overcome this problems I used the same approach described in section~\ref{sec:attractors} to smoothen the empirical field by first eliminating isolated bins and then convolving with the kernel defined in eq.~\ref{eq:kernel}.
+
+Since the drift field is not perfectly conservative, integrating in one direction or another may produce different potential values for the same lattice site. To minimize these differences I built the potential exploring the neighbouring sites using a breadth first search algorithm and taking the mean when multiple choices of the integration direction were available.
+
+
 
 \clearpage
 
