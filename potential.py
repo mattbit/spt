@@ -97,15 +97,26 @@ def build_potential(grid, u, v, source):
 
     return U
 
+
 # Plot the potential
 U = build_potential(grid, us, vs, (24, 3))
 grid.heatmap(U, title="Potential cluster")
 
+grid.heatmap(U[20:40, 0:20], title="Potential cluster", inline=False)
+
 # And the corresponding quiver
-xx, yy = np.meshgrid(grid.x[20:50], grid.y[0:30])
-fig = ff.create_quiver(xx, yy, us[20:50, 0:30].T, vs[20:50, 0:30].T, scale=5)
+xx, yy = np.meshgrid(grid.x[20:40], grid.y[0:20])
+fig = ff.create_quiver(xx, yy, us[20:40, 0:20].T, vs[20:40, 0:20].T, scale=10)
 fig.layout = grid._layout()
-py.iplot(fig)
+fig.layout.xaxis.tick0 = grid.x[0] - grid.binsize/2
+fig.layout.yaxis.tick0 = grid.y[0] - grid.binsize/2
+fig.layout.xaxis.dtick = grid.binsize
+fig.layout.yaxis.dtick = grid.binsize
+fig.layout.width = 1000
+fig.layout.height = 1000
+py.plot(fig)
+
+py.plot([Surface(z=U.T)])
 
 # Compare the attractors found with the simulation.
 A, B = (3, 45), (18, 43)
@@ -113,4 +124,6 @@ C = (15, 45)
 
 UA = build_potential(grid, us, vs, C)
 
-grid.heatmap(mask2d(UA, C, 15), title="Attractors")
+fig = Figure(data=[Heatmap(z=mask2d(UA, C, 15).T, zmin=0, zmax=0.5, colorscale="Portland")],
+             layout=grid._layout())
+py.plot(fig)

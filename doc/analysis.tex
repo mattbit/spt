@@ -1,15 +1,15 @@
 \documentclass[a4paper]{article}
 
 \usepackage{amsmath,amssymb,bm}
+\usepackage[font=sf]{caption}
 \usepackage[british]{babel}
 \usepackage{graphicx}
 \usepackage{titlesec}
+\usepackage{hyperref}
 \usepackage{xltxtra}
 \usepackage{titling}
-\usepackage[font=sf]{caption}
 \usepackage{subfig}
 \usepackage{siunitx}
-
 \setmainfont[Ligatures=TeX]{PT Serif}
 \setsansfont[Ligatures=TeX]{PT Sans}
 
@@ -60,7 +60,7 @@ A dataset of single particle trajectories sampled at \SI{125}{ms} was analyzed. 
 
 In particular I was interested in studying two features of the drift field: attractors and channels. Attractors (or wells) are regions of the space where the drift field vanishes and the particles can escape only by diffusion. Channels instead are paths along which particles are funneled together and pushed at high speed from one region to another.
 
-The dataset consisted in \SI{\sim 350 000} datapoints belonging to \SI{\sim 20 000} trajectories. The spatial distribution of the datapoints is visible in figure \ref{fig:datapoints}.
+The dataset consisted in \SI{\sim 350 000} datapoints belonging to \SI{\sim 20 000} trajectories. The spatial distribution of the datapoints is visible in figure \ref{fig:datapoints}. The supporting code is available in \cite{code}.
 
 \begin{figure}[h]
   \includegraphics[width=\linewidth]{img/01_datapoints.png}
@@ -93,9 +93,9 @@ a^i(\bm{x}) &= \lim_{\Delta t \to 0}\frac{\mathbb{E}\left[x^i(t + \Delta t) - x^
 \end{align}
 where the expected value is taken on the trajectories that pass through $\bm{x}$ at time $t$.
 
-We can translate eq. \ref{eq:drift} and \ref{eq:diff} into statistical estimators by grouping the trajectories in a small neighbourhood of $\bm{x}$ and then performing the average. For convenience I chose to divide the space using a grid of identical square bins $S_l(\bm{x})$ characterized by side $l$ and center $\bm{x}$.
+We can translate eq. \ref{eq:drift} and \ref{eq:diff} into statistical estimators by grouping the trajectories in a small neighbourhood of $\bm{x}$ on which we can perform the average. For convenience I chose to divide the space using a grid of identical square bins $S_l(\bm{x})$ characterized by side $l$ and center $\bm{x}$.
 
-It is convenient to define $\Delta \bm{x}_k(t_m) \equiv \bm{x}_k(t_m + \Delta t) - \bm{x}_k(t_m)$, i.e the $m$-th step of the trajectory $k$. The estimators can then be defined as
+Defining $\Delta \bm{x}_k(t_m) \equiv \bm{x}_k(t_m + \Delta t) - \bm{x}_k(t_m)$, i.e the $m$-th step of the trajectory $k$, the estimators can then be expressed as
 
 \begin{align}
 \hat{a}^i({\bm{x}}) &= \frac{1}{N} \sum_{\bm{x}_k(t_m) \in S_l(\bm{x})} \frac{\Delta x_k^i(t_m)}{\Delta t} \label{eq:drift-estimator} \\[10pt]
@@ -123,7 +123,7 @@ A similar result holds for the diffusion estimator. Considering the case of isot
 \end{align}
 which is a random variable with mean $D$ and variance inversely proportional to $N$.
 
-In both cases the standard error is inversely proportional to $\sqrt{N}$, so we can control it by choosing a proper partitioning and by discarding the bins that contain a number of datapoints lower than a given threshold.
+In both cases the standard error is inversely proportional to $\sqrt{N}$, so we can control it by choosing a proper partitioning and by discarding the bins that contain a number of datapoints lower than a given threshold. In the following, I considered a threshold value of 100 datapoints per bin.
 
 
 \section{Attractors in the drift field}
@@ -158,6 +158,7 @@ In the previous section I have given a characterisation of the attractors, but w
 Here instead I tried a different approach by simulating the motion of particles in the effective drift field. Starting from a uniform distribution of the particles, I identify as attractors the bins showing the highest particle density after a sufficiently long simulation time.
 
 To simulate the drift field we have to do some preliminary work. First of all, the trajectories do not cover the whole space, so there are regions where we are unable to estimate the drift. Moreover, we filtered out the bins that do not reach a minimum threshold of samples, adding more holes in the domain of the drift field.
+
 We can identify two main kinds of artifacts which would hinder the simulation: bins such that all their 8 neighbours have an undefined field (isolated bins) and bins with undefined field surrounded by well defined bins (holes). Running the numerical simulation in this discontinuous field would not be effective, since the particles would get trapped in the isolated bins or holes.
 
 To account for this, I manipulated the empirical field by filtering out the isolated bins and then smoothening the field to eliminate the holes. For the smoothening part I used an approximated Gaussian kernel defined as
@@ -169,7 +170,7 @@ K = \frac{1}{16} \begin{bmatrix} 1 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 1\end{bmatrix
 \begin{figure}[htbp] \label{fig:filtering}
   \subfloat[Estimated field]{\includegraphics[width=0.5\linewidth]{img/03_empirical_drift.png}}
   \subfloat[Smoothened field]{\includegraphics[width=0.5\linewidth]{img/03_smooth_drift.png}}
-  \caption{The modulus of the drift field before (a) and after (b) the application of the filter in a subregion of the domain.}
+  \caption{The modulus of the drift field before (a) and after (b) the application of the Gaussian filter (subregion of the total domain).}
 \end{figure}
 
 The simulated trajectories are obtained by forward Euler's scheme
@@ -227,13 +228,35 @@ U_{i+1,j} = -a^x_{i,j}l + U_{i,j} \\[10pt]
 U_{i,j+1} = -a^y_{i,j}l + U_{i,j}
 \end{align}
 
-For this method to work effectively we need a cluster of connected sites where the field $\bm{a}$ is defined and one initial condition for $U$ is fixed. This is not the case for the rough estimated field, since it is full of holes and discontinuities that would prevent us from building a smooth potential. Note also that for isolated bins we have no possibility of reconstructing the potential. To overcome this problems I used the same approach described in section~\ref{sec:attractors} to smoothen the empirical field by first eliminating isolated bins and then convolving with the kernel defined in eq.~\ref{eq:kernel}.
+For this method to work effectively we need a cluster of contiguous sites where the field $\bm{a}$ is defined and one initial condition for $U$ is fixed. This is not the case for the rough estimated field, since it is full of holes and discontinuities that would prevent us from building a smooth potential. Note also that for isolated bins we have no possibility of reconstructing the potential. To overcome this problems I used the same approach described in section~\ref{sec:attractors} to smoothen the empirical field by first eliminating isolated bins and then convolving with the kernel defined in eq.~\ref{eq:kernel}. After applying the convolution we obtain a drift field with large clusters of connected bins on which it is possible to reconstruct the potential.
 
-Since the drift field is not perfectly conservative, integrating in one direction or another may produce different potential values for the same lattice site. To minimize these differences I built the potential exploring the neighbouring sites using a breadth first search algorithm and taking the mean when multiple choices of the integration direction were available.
+Since the drift field is not perfectly conservative, integrating in one direction or another may produce different potential values for the same lattice site. To minimize these differences I built the potential exploring the adjacent sites in a breadth first order and taking the mean when multiple choices of the integration direction were available (detailed implementation can be found in the supporting code \cite{code}).
 
+\begin{figure}
+  \begin{minipage}[t]{0.7\linewidth}
+  \subfloat[]{\includegraphics[width=\linewidth]{img/04_potential.png}}
+  \end{minipage}
+  \begin{minipage}[t]{0.27\linewidth}
+  \subfloat[]{
+    \includegraphics[width=\linewidth]{img/04_potential_detail.png}}\\
+  \subfloat[]{
+    \includegraphics[width=\linewidth]{img/04_channel.png}}
+  \end{minipage}
+  \caption{The reconstructed potential for a cluster of contiguous bins. A steep valley is easily identifiable in the bottom left tail of (a). The detail this region is shown in (b) and the corresponding field vectors in (c).}
+  \label{fig:potential}
+\end{figure}
 
+The potential reconstructed with this method and the location of a valley are visibile in figure~\ref{fig:potential}. A 3D view of the same potential is visible in fig.~\ref{fig:3d-potential}.
+
+Lastly, the knowledge of the potential offers a new way to locate attractors, as they are local minima of $U$. We can compare results of this method with those of the numerical simulation used in section~\ref{sec:attractors}. The finding is coherent: a comparison of the attractors of figure~\ref{fig:attractors} is visible in figure~\ref{fig:potential-attractors}.
 
 \clearpage
+
+\begin{figure}[ht]
+  \includegraphics[width=\linewidth]{img/04_attractors.png}
+  \caption{Localization of the two potential wells already shown in figure~\ref{fig:attractors} using the potential. I recall their weights $W_A = 7,03 \times 10^{-5}$ and $W_B = 2,06 \times 10^{-5}$. }
+  \label{fig:potential-attractors}
+\end{figure}
 
 \begin{thebibliography}{9}
 \bibitem{hoze2012}
@@ -244,6 +267,9 @@ Hoz\'e N, Holcman D. 2014. \textit{Residence times of receptors in dendritic spi
 
 \bibitem{schuss}
 Schuss, Z. 2010. \textit{Theory and applications of stochastic processes: an analytical approach.} Springer, New York.
+
+\bibitem{code}
+Supporting code: \href{https://github.com/mattbit/spt}{https://github.com/mattbit/spt}
 
 \end{thebibliography}
 
