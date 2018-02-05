@@ -68,7 +68,7 @@ class Grid(object):
 
         return z
 
-    def heatmap(self, data, title="No title", threshold=0):
+    def heatmap(self, data, title="No title", threshold=0, inline=True):
         if callable(data):
             z = self.apply(data, threshold)
         else:
@@ -76,23 +76,29 @@ class Grid(object):
 
         htm = Heatmap(z=z.T, colorscale="Portland")
 
-        return self.plot(htm, title)
+        return self.plot(htm, title, inline)
 
     def count(self, threshold):
         n = self.apply(lambda d: 1, threshold)
 
         return np.nansum(n)
 
-    def plot(self, trace, title):
+    def plot(self, trace, title, inline=True):
         lyt = self._layout()
         lyt.title = title
         fig = Figure(data=[trace], layout=lyt)
-        py.plot(fig, filename=title + ".html")
+
+        if inline:
+            py.iplot(fig)
+        else:
+            fig.layout.height = 1000
+            fig.layout.width = 1000
+            py.plot(fig, filename=title + ".html")
 
     def _layout(self):
         return Layout(
-            height=1000,
-            width=1000,
+            height=600,
+            width=600,
             yaxis=dict(scaleanchor="x", showgrid=True, zeroline=False,
                        autotick=False, ticks="", dtick=1, tick0=-0.5,
                        showticklabels=False),

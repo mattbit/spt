@@ -4,7 +4,7 @@ import scipy.stats
 import scipy.optimize
 import plotly.offline as py
 import plotly.figure_factory as ff
-from plotly.graph_objs import Heatmap, Histogram, Scatter, Layout, Figure, Histogram2d
+from plotly.graph_objs import Heatmap, Histogram, Scatter, Layout, Figure
 
 from grid import Grid
 
@@ -21,7 +21,7 @@ data = pandas.read_csv(DATAFILE, sep=";", decimal=",",
 # Create the grid object.                                           #
 #####################################################################
 
-grid = Grid(data, binsize=0.1)
+grid = Grid(data, binsize=0.5)
 
 # %%
 #####################################################################
@@ -42,28 +42,13 @@ py.iplot([Histogram2d(
 )])
 
 
-std = np.nanstd(steps_x, ddof=1)
-mean = np.nanmean(steps_x)
-x = np.linspace(-0.5, 0.5, num=100)
-y = normal.pdf(x, loc=mean, scale=0.5*std)/820
-
-py.iplot([
-    Histogram(x=steps_x, histnorm="probability", name="Empirical"),
-    Scatter(x=x, y=y, name="Fit")])
-
-
-
-py.iplot([Histogram(x=steps_y, histnorm="probability")])
-
-
-
 
 # %%
 #####################################################################
 # Plot a heatmap of data point count.                               #
 #####################################################################
 
-grid.heatmap(len, "Number of datapoints", threshold=1)
+grid.heatmap(len, "Number of datapoints", threshold=100)
 
 # %%
 #####################################################################
@@ -76,20 +61,7 @@ def step_norm(data):
 
     return np.nanmean(steps) if len(steps) > 0 else np.nan
 
-grid.heatmap(step_norm, "Step modulus", threshold=10)
-
-
-# %%
-#####################################################################
-# Estimate the drift.                                               #
-#####################################################################
-
-def drift_norm(data):
-    vals = data.loc[:, ("step_x", "step_y")].values
-
-    return np.linalg.norm(np.nanmean(vals))
-
-grid.heatmap(drift_norm, "Drift modulus", threshold=100)
+grid.heatmap(step_norm, "Step modulus", threshold=100)
 
 
 # %%
@@ -110,7 +82,11 @@ diff_xx = grid.apply(diff_tensor_xx, threshold=100)
 diff_xy = grid.apply(diff_tensor_xy, threshold=100)
 diff_yy = grid.apply(diff_tensor_yy, threshold=100)
 
-grid.heatmap(0.5*diff_xx + 0.5*diff_yy)
+D = 0.5*diff_xx + 0.5*diff_yy
+
+grid.heatmap(D, title="Diffusion coefficient")
+
+grid.heatmap(abs(diff_xy/D), title="Isotropy of diffusion")
 
 
 # %%
@@ -118,58 +94,8 @@ grid.heatmap(0.5*diff_xx + 0.5*diff_yy)
 # Drift vector field.                                               #
 #####################################################################
 
-def estimate_drift(grid, threshold=20):
-    xx, yy = np.meshgrid(grid.x, grid.y, indexing="ij")
+from utils import estimate_drift
 
-    u = np.full((grid.ndiv, grid.ndiv), np.nan)
-    v = u.copy()
+xx, yy, u, v = estimate_drift(grid, TIMESTEP, threshold=100)
 
-    for ij, data in grid.data.groupby("bin"):
-
-        if len(data) < threshold:
-            continue
-
-        drift = np.nanmean(data.loc[:, ("step_x", "step_y")].values,
-                           axis=0) / TIMESTEP
-
-        u[ij] = drift[0]
-        v[ij] = drift[1]
-
-    return xx, yy, u, v
-
-xx, yy, u, v = estimate_drift(grid, threshold=100)
-
-fig = ff.create_quiver(xx, yy, u, v, scale=10)
-
-
-x_min = grid.data["x"].min()
-y_min = grid.data["y"].min()
-
-lyt = Layout(
-    title="Drift field",
-    height=600,
-    width=600,
-    yaxis=dict(scaleanchor="x", showgrid=True, zeroline=False,
-               autotick=False, dtick=grid.binsize, tick0=y_min,
-               showticklabels=False),
-    xaxis=dict(showgrid=True, zeroline=False,
-               autotick=False, dtick=grid.binsize, tick0=x_min,
-               showticklabels=False)
-)
-
-fig.update(layout=lyt)
-py.iplot(fig)
-
-np.nanmean(np.sqrt(u**2 + v**2))
-
-drift = np.sqrt(u**2 + v**2)
-
-grid.heatmap(drift < 0.035, threshold=100)
-
-# %%
-# Fit attractors
-
-def bfit(x, A, r):
-    return -2*A/r**2 * np.sum(x)
-
-np.sqrt(2 * 0.05/(200*0.015))
+grid.heatmap(np.hypot(u, v), threshold=100, title="Drift norm")
